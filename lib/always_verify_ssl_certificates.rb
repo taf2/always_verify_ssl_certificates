@@ -1,6 +1,12 @@
 require "net/http"
 require "net/https"
 
+class AlwaysVerifySSLCertificates
+  class << self
+    attr_accessor :ca_file, :ca_path
+  end
+end
+
 module Net
   class HTTP
     private
@@ -9,7 +15,13 @@ module Net
         s = timeout(@open_timeout) { TCPSocket.open(conn_address(), conn_port()) }
         D "opened"
         if use_ssl?
-          self.verify_mode = OpenSSL::SSL::VERIFY_PEER
+          if !AlwaysVerifySSLCertificates.ca_file && !AlwaysVerifySSLCertificates.ca_path
+            raise "You must set AlwaysVerifySSLCertificates.ca_file or AlwaysVerifySSLCertificates.ca_path to use SSL."
+          end
+
+          @ssl_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
+          @ssl_context.ca_file     = AlwaysVerifySSLCertificates.ca_file if AlwaysVerifySSLCertificates.ca_file
+          @ssl_context.ca_path     = AlwaysVerifySSLCertificates.ca_path if AlwaysVerifySSLCertificates.ca_path
           s = OpenSSL::SSL::SSLSocket.new(s, @ssl_context)
           s.sync_close = true
         end
