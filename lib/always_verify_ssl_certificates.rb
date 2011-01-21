@@ -15,10 +15,6 @@ module Net
         s = timeout(@open_timeout) { TCPSocket.open(conn_address(), conn_port()) }
         D "opened"
         if use_ssl?
-          if !AlwaysVerifySSLCertificates.ca_file && !AlwaysVerifySSLCertificates.ca_path
-            raise "You must set AlwaysVerifySSLCertificates.ca_file or AlwaysVerifySSLCertificates.ca_path to use SSL."
-          end
-
           @ssl_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
           @ssl_context.ca_file     = AlwaysVerifySSLCertificates.ca_file if AlwaysVerifySSLCertificates.ca_file
           @ssl_context.ca_path     = AlwaysVerifySSLCertificates.ca_path if AlwaysVerifySSLCertificates.ca_path
