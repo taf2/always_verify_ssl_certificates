@@ -1,7 +1,20 @@
 require 'helper'
 
 class TestAlwaysVerifySslCertificates < Test::Unit::TestCase
-  should "probably rename this file and start testing for real" do
-    flunk "hey buddy, you should probably rename this file and start testing for real"
+
+  should "It should verify the peer even if it's not set on Net/HTTP" do
+    begin
+      AlwaysVerifySSLCertificates.ca_file = File.expand_path(File.join(File.dirname(__FILE__), '/../lib/cacert.pem'))
+      url = URI.parse('https://google.com/')
+      http = Net::HTTP.new(url.host, url.port)
+      http.use_ssl = true
+      res = http.get("/", {})
+    rescue => e
+#      puts e.message
+#      puts e.backtrace.join("\n")
+      assert_equal OpenSSL::SSL::SSLError, e.class
+      assert_equal "hostname was not match with the server certificate", e.message
+    end
   end
+
 end
