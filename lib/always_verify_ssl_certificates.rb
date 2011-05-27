@@ -1,14 +1,40 @@
 require "net/http"
 require "net/https"
+require "net/protocol"
 
 class AlwaysVerifySSLCertificates
   class << self
     attr_accessor :ca_file, :ca_path
+
+    def off!
+      Net::HTTP.class_eval do
+        private
+
+        undef connect
+
+        def connect
+          default_connect
+        end
+      end
+    end
+
+    def on!
+      Net::HTTP.class_eval do
+        private
+
+        # mix in our new connect
+        if RUBY_VERSION.match(/^1.8/)
+          include OverrideConnect18
+        elsif RUBY_VERSION.match(/^1.9/)
+          include OverrideConnect19
+        end
+      end
+    end
   end
 end
 
 module OverrideConnect19
-  def connect
+  def connect_and_verify
     D "opening connection to #{conn_address()}..."
     s = timeout(@open_timeout) { TCPSocket.open(conn_address(), conn_port()) }
     D "opened"
@@ -27,7 +53,7 @@ module OverrideConnect19
       s = OpenSSL::SSL::SSLSocket.new(s, @ssl_context)
       s.sync_close = true
     end
-    @socket = BufferedIO.new(s)
+    @socket = Net::BufferedIO.new(s)
     @socket.read_timeout = @read_timeout
     @socket.debug_output = @debug_output
     if use_ssl?
@@ -50,10 +76,19 @@ module OverrideConnect19
     end
     on_connect
   end
+
+  def self.included(base)
+    base.class_eval do
+      undef connect
+      def connect
+        connect_and_verify
+      end
+    end
+  end
 end
 
 module OverrideConnect18
-  def connect
+  def connect_and_verify
     D "opening connection to #{conn_address()}..."
     s = timeout(@open_timeout) { TCPSocket.open(conn_address(), conn_port()) }
     D "opened"
@@ -64,7 +99,7 @@ module OverrideConnect18
       s = OpenSSL::SSL::SSLSocket.new(s, @ssl_context)
       s.sync_close = true
     end
-    @socket = BufferedIO.new(s)
+    @socket = Net::BufferedIO.new(s)
     @socket.read_timeout = @read_timeout
     @socket.debug_output = @debug_output
     if use_ssl?
@@ -87,16 +122,20 @@ module OverrideConnect18
     end
     on_connect
   end
-end
 
-module Net
-  class HTTP
-    private
-    if RUBY_VERSION.match(/^1.8/)
-      include OverrideConnect18
-    elsif RUBY_VERSION.match(/^1.9/)
-      include OverrideConnect19
+  def self.included(base)
+    base.class_eval do
+      undef connect
+      def connect
+        connect_and_verify
+      end
     end
-
   end
 end
+
+Net::HTTP.class_eval do
+  private
+  # save the original connect
+  alias default_connect connect
+end
+AlwaysVerifySSLCertificates.on!
